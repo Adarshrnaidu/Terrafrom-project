@@ -22,5 +22,3 @@ provider "aws" {
 
 
 #Creating VPC
-
-
