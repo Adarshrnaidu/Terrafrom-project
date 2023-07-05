@@ -30,9 +30,11 @@ resource "aws_vpc" "terraform-VPC" {
   }
 }
 
+
 #Creating private subnets
 resource "aws_subnet" "terraform-private-subnet-1a" {
   vpc_id     = aws_vpc.terraform-VPC.id
+  availability_zone = "ap-south-1a"
   cidr_block = "10.0.1.0/24"
 
   tags = {
@@ -42,6 +44,7 @@ resource "aws_subnet" "terraform-private-subnet-1a" {
 
 resource "aws_subnet" "terraform-private-subnet-1b" {
   vpc_id     = aws_vpc.terraform-VPC.id
+  availability_zone = "ap-south-1b"
   cidr_block = "10.0.2.0/24"
 
   tags = {
@@ -53,7 +56,8 @@ resource "aws_subnet" "terraform-private-subnet-1b" {
 #Creating public subnets
 resource "aws_subnet" "terraform-public-subnet-1a" {
   vpc_id     = aws_vpc.terraform-VPC.id
-  cidr_block = "10.0.2.0/24"
+  availability_zone = "ap-south-1a"
+  cidr_block = "10.0.3.0/24"
 
   tags = {
     Name = "terraform-public-subnet-1a"
@@ -62,9 +66,41 @@ resource "aws_subnet" "terraform-public-subnet-1a" {
 
 resource "aws_subnet" "terraform-public-subnet-1b" {
   vpc_id     = aws_vpc.terraform-VPC.id
-  cidr_block = "10.0.2.0/24"
+  availability_zone = "ap-south-1b"
+  cidr_block = "10.0.4.0/24"
 
   tags = {
     Name = "terraform-public-subnet-1b"
+  }
+}
+
+
+#Creating EC2 machine on private subnet 1a
+resource "aws_instance" "card-service" {
+  ami           = "ami-0f5ee92e2d63afc18"
+  instance_type = "t2.micro"
+  availability_zone = aws_subnet.terraform-public-subnet-1a.id
+  key_name = aws_key_pair.terrafrom-keypair.id 
+  associate_public_ip_address ="true"
+
+  tags = {
+    Name = "card-website"
+  }
+}
+
+
+#Creating keypair
+resource "aws_key_pair" "terrafrom-keypair" {
+  key_name   = "terraform-keypair"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDvdRwwK4+Dr7pScPXcHQpviHpGOwmqhy9QG8ewxS9s2EMhlqhy7dh1wv+fOsx+5VtP1IVMGuJEfhflWZmi5dtSilhwLZn8nxJszL++YsYVT0kAfhD7r/wNPfga5atJhjwNP3SY4N1ArmG3evmX+xc748i1aKKrZyWwwY4fKHj4hvWbZzXxVMk5XsceprOVzDcbqhASmEoJ+pT/uWacOXLdj7Kb2TkJoanIXqIty51tvzutj7rmnL8PXXBDNIEX3qyyrwhd6Y7Q7QU2c2cQ+BwCl/3R7B5o4S2lKGE+DlbaAZvJIb/DfrJRiECHJufpjk3nNZBOC5sQDbT+NYzjgv6Gmnia7KPy02DNz/FZZSBpyzafdm9saSbm58yBa/uQJr/pQfMlzOV1II0O5ZA04j/210FOQb8YnpGylP3PWGzbI8Wn3oG+lJ6YJM/F1D+s98d/TKn/R3kab+KyobsDP8n+jPZjGi3Ua8eAp5L7T3rssPDgHHzZkb6UTO4HzclBtyU= Adars@DESKTOP-7D8DJ7U"
+}
+
+
+#Creating Internet gateway
+resource "aws_internet_gateway" "Terraform-IG" {
+  vpc_id = aws_vpc.terraform-VPC.id
+
+  tags = {
+    Name = "Terraform-IG"
   }
 }
