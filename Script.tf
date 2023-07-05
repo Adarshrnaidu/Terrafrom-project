@@ -82,6 +82,7 @@ resource "aws_instance" "card-service" {
   availability_zone = aws_subnet.terraform-public-subnet-1a.id
   key_name = aws_key_pair.terrafrom-keypair.id 
   associate_public_ip_address ="true"
+  vpc_security_group_ids = [aws_security_group.terraform-security-group.id]
 
   tags = {
     Name = "card-website"
@@ -97,10 +98,73 @@ resource "aws_key_pair" "terrafrom-keypair" {
 
 
 #Creating Internet gateway
-resource "aws_internet_gateway" "Terraform-IG" {
+resource "aws_internet_gateway" "terraform-IG" {
   vpc_id = aws_vpc.terraform-VPC.id
 
   tags = {
     Name = "Terraform-IG"
   }
 }
+
+
+#Creating a swcurity group for EC2
+resource "aws_security_group" "terraform-security-group" {
+  description = "Allow inbound traffic"
+  vpc_id      = aws_vpc.terraform-VPC.id
+
+  ingress {
+    description      = "inbound-rule"
+    from_port        = 22
+    to_port          = 22
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description      = "inbound-rule1"
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "terrafrom-security-group"
+  }
+}
+
+
+#Creating a Route Table
+resource "aws_route_table" "terrafrom-RT" {
+  vpc_id = aws_vpc.terraform-VPC.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.terraform-IG.id
+  }
+
+  tags = {
+    Name = "terraform-RT"
+  }
+}
+
+
+#Associating Public subnets to Route Tables
+resource "aws_route_table_association" "terraform-RT-association" {
+  subnet_id      = aws_subnet.terraform-public-subnet-1a.id
+  route_table_id = aws_route_table.terrafrom-RT.id
+}
+
+resource "aws_route_table_association" "terraform-RT-association1" {
+  subnet_id      = aws_subnet.terraform-public-subnet-1b.id
+  route_table_id = aws_route_table.terrafrom-RT.id
+}
+
