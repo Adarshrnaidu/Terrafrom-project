@@ -33,7 +33,7 @@ resource "aws_vpc" "terraform-VPC" {
 
 #Creating private subnets
 resource "aws_subnet" "terraform-private-subnet-1a" {
-  vpc_id     = aws_vpc.terraform-VPC.id
+  vpc_id     = var.VPC_id
   availability_zone = "ap-south-1a"
   cidr_block = "10.0.1.0/24"
 
@@ -43,7 +43,7 @@ resource "aws_subnet" "terraform-private-subnet-1a" {
 }
 
 resource "aws_subnet" "terraform-private-subnet-1b" {
-  vpc_id     = aws_vpc.terraform-VPC.id
+  vpc_id     = var.VPC_id
   availability_zone = "ap-south-1b"
   cidr_block = "10.0.2.0/24"
 
@@ -55,7 +55,7 @@ resource "aws_subnet" "terraform-private-subnet-1b" {
 
 #Creating public subnets
 resource "aws_subnet" "terraform-public-subnet-1a" {
-  vpc_id     = aws_vpc.terraform-VPC.id
+  vpc_id     = var.VPC_id
   availability_zone = "ap-south-1a"
   cidr_block = "10.0.3.0/24"
 
@@ -65,7 +65,7 @@ resource "aws_subnet" "terraform-public-subnet-1a" {
 }
 
 resource "aws_subnet" "terraform-public-subnet-1b" {
-  vpc_id     = aws_vpc.terraform-VPC.id
+  vpc_id     = var.VPC_id
   availability_zone = "ap-south-1b"
   cidr_block = "10.0.4.0/24"
 
@@ -76,18 +76,18 @@ resource "aws_subnet" "terraform-public-subnet-1b" {
 
 
 #Creating EC2 machine on private subnet 1a
-resource "aws_instance" "card-service" {
-  ami           = "ami-0f5ee92e2d63afc18"
-  instance_type = "t2.micro"
-  availability_zone = aws_subnet.terraform-public-subnet-1a.id
-  key_name = aws_key_pair.terrafrom-keypair.id 
-  associate_public_ip_address ="true"
-  vpc_security_group_ids = [aws_security_group.terraform-security-group.id]
+# resource "aws_instance" "card-service" {
+# ami           = "ami-0f5ee92e2d63afc18"
+#  instance_type = "t2.micro"
+#  availability_zone = aws_subnet.terraform-public-subnet-1a.id
+#  key_name = aws_key_pair.terrafrom-keypair.id 
+# associate_public_ip_address ="true"
+#  vpc_security_group_ids = [aws_security_group.terraform-security-group.id]
 
-  tags = {
-    Name = "card-website"
-  }
-}
+#  tags = {
+#    Name = "card-website"
+#  }
+#}
 
 
 #Creating keypair
@@ -99,7 +99,7 @@ resource "aws_key_pair" "terrafrom-keypair" {
 
 #Creating Internet gateway
 resource "aws_internet_gateway" "terraform-IG" {
-  vpc_id = aws_vpc.terraform-VPC.id
+  vpc_id = var.VPC_id
 
   tags = {
     Name = "Terraform-IG"
@@ -107,10 +107,11 @@ resource "aws_internet_gateway" "terraform-IG" {
 }
 
 
-#Creating a swcurity group for EC2
+
+#Creating a security group for EC2
 resource "aws_security_group" "terraform-security-group" {
   description = "Allow inbound traffic"
-  vpc_id      = aws_vpc.terraform-VPC.id
+  vpc_id      = var.VPC_id
 
   ingress {
     description      = "inbound-rule"
@@ -137,14 +138,15 @@ resource "aws_security_group" "terraform-security-group" {
   }
 
   tags = {
-    Name = "terrafrom-security-group"
+    Name = "terraform-security-group"
   }
 }
 
 
-#Creating a Route Table
+
+#Creating a Route Table for Public subnets
 resource "aws_route_table" "terrafrom-RT" {
-  vpc_id = aws_vpc.terraform-VPC.id
+  vpc_id = var.VPC_id
 
   route {
     cidr_block = "0.0.0.0/0"
@@ -155,7 +157,6 @@ resource "aws_route_table" "terrafrom-RT" {
     Name = "terraform-RT"
   }
 }
-
 
 #Associating Public subnets to Route Tables
 resource "aws_route_table_association" "terraform-RT-association" {
@@ -168,3 +169,112 @@ resource "aws_route_table_association" "terraform-RT-association1" {
   route_table_id = aws_route_table.terrafrom-RT.id
 }
 
+
+
+#Creating a Route Table for Private subnets
+resource "aws_route_table" "terrafrom-private-RT" {
+  vpc_id = var.VPC_id
+
+  tags = {
+    Name = "terraform-private-RT"
+  }
+}
+
+#Associating Private subnets to Route Tables
+resource "aws_route_table_association" "terraform-private-RT-association" {
+  subnet_id      = aws_subnet.terraform-public-subnet-1a.id
+  route_table_id = aws_route_table.terrafrom-private-RT.id
+}
+
+resource "aws_route_table_association" "terraform-private-RT-association1" {
+  subnet_id      = aws_subnet.terraform-public-subnet-1b.id
+  route_table_id = aws_route_table.terrafrom-private-RT.id
+}
+
+
+
+#Creating the Launch Template for ASG
+resource "aws_launch_template" "terraform-LT" {
+  name = "terraform-LT"
+
+  instance_type = "t2.micro"
+
+  key_name = aws_key_pair.terrafrom-keypair.id 
+
+  monitoring {
+    enabled = true
+  }
+
+#placement {
+#  availability_zone = ["ap-south-1a","ap-south-1b"]
+#}
+
+  vpc_security_group_ids = [aws_security_group.terraform-security-group.id]
+
+  tag_specifications {
+    resource_type = "instance"
+
+    tags = {
+      Name = "Terraform-ASG-Project"
+    }
+  }
+
+  user_data = filebase64("instance-userdata.sh")
+}
+
+
+
+#Creating the Auto Scaling Group(ASG)
+resource "aws_autoscaling_group" "terraform-ASG" {
+  #availability_zones = ["ap-south-1a","ap-south-1b"]
+  vpc_zone_identifier = ["aws_subnet.terraform-public-subnet-1a.id","aws_subnet.terraform-public-subnet-1b.id"]
+  health_check_grace_period = 300
+  health_check_type         = "ELB"
+  desired_capacity   = 2
+  max_size           = 4
+  min_size           = 2
+  target_group_arns = [aws_lb_target_group.terraform-TG.arn]
+
+  launch_template {
+    id      = aws_launch_template.terraform-LT.id
+    version = "$Latest"
+  }
+}
+
+
+#Creating the Load Balancer Target group with ASG
+resource "aws_lb_target_group" "terraform-TG" {
+  name     = "terraform-TG"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = var.VPC_id
+}
+
+
+
+#Creating Load balancer Listerner with ASG
+resource "aws_lb_listener" "terraform-listerner" {
+  load_balancer_arn = aws_lb.terraform-loadbalancer.arn
+  port              = "80"
+  protocol          = "HTTP"
+ 
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.terraform-TG.arn
+  }
+}
+
+
+
+#Creating Load Balancer
+resource "aws_lb" "terraform-loadbalancer" {
+  name               = "terraform-loadbalancer"
+  internal           = "false"
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.terraform-security-group.id]
+  subnets            = ["aws_subnet.terraform-public-subnet-1a.id","aws_subnet.terraform-public-subnet-1b.id"]
+
+  tags = {
+    Environment = "Project"
+  }
+}
