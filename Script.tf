@@ -221,7 +221,7 @@ resource "aws_launch_template" "terraform-LT" {
     }
   }
 
-  user_data = filebase64("instance-userdata.sh")
+  user_data = filebase64("Instance-userdata.sh")
 }
 
 
