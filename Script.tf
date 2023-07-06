@@ -33,7 +33,7 @@ resource "aws_vpc" "terraform-VPC" {
 
 #Creating private subnets
 resource "aws_subnet" "terraform-private-subnet-1a" {
-  vpc_id     = var.VPC_id
+  vpc_id     = aws_vpc.terraform-VPC.id
   availability_zone = "ap-south-1a"
   cidr_block = "10.0.1.0/24"
 
@@ -43,7 +43,7 @@ resource "aws_subnet" "terraform-private-subnet-1a" {
 }
 
 resource "aws_subnet" "terraform-private-subnet-1b" {
-  vpc_id     = var.VPC_id
+  vpc_id     = aws_vpc.terraform-VPC.id
   availability_zone = "ap-south-1b"
   cidr_block = "10.0.2.0/24"
 
@@ -55,9 +55,10 @@ resource "aws_subnet" "terraform-private-subnet-1b" {
 
 #Creating public subnets
 resource "aws_subnet" "terraform-public-subnet-1a" {
-  vpc_id     = var.VPC_id
+  vpc_id     = aws_vpc.terraform-VPC.id
   availability_zone = "ap-south-1a"
   cidr_block = "10.0.3.0/24"
+  map_public_ip_on_launch = "true"
 
   tags = {
     Name = "terraform-public-subnet-1a"
@@ -65,9 +66,10 @@ resource "aws_subnet" "terraform-public-subnet-1a" {
 }
 
 resource "aws_subnet" "terraform-public-subnet-1b" {
-  vpc_id     = var.VPC_id
+  vpc_id     = aws_vpc.terraform-VPC.id
   availability_zone = "ap-south-1b"
   cidr_block = "10.0.4.0/24"
+  map_public_ip_on_launch = "true"
 
   tags = {
     Name = "terraform-public-subnet-1b"
@@ -99,7 +101,7 @@ resource "aws_key_pair" "terrafrom-keypair" {
 
 #Creating Internet gateway
 resource "aws_internet_gateway" "terraform-IG" {
-  vpc_id = var.VPC_id
+  vpc_id = aws_vpc.terraform-VPC.id
 
   tags = {
     Name = "Terraform-IG"
@@ -111,7 +113,7 @@ resource "aws_internet_gateway" "terraform-IG" {
 #Creating a security group for EC2
 resource "aws_security_group" "terraform-security-group" {
   description = "Allow inbound traffic"
-  vpc_id      = var.VPC_id
+  vpc_id      = aws_vpc.terraform-VPC.id
 
   ingress {
     description      = "inbound-rule"
@@ -145,8 +147,8 @@ resource "aws_security_group" "terraform-security-group" {
 
 
 #Creating a Route Table for Public subnets
-resource "aws_route_table" "terrafrom-RT" {
-  vpc_id = var.VPC_id
+resource "aws_route_table" "terraform-RT" {
+  vpc_id = aws_vpc.terraform-VPC.id
 
   route {
     cidr_block = "0.0.0.0/0"
@@ -158,36 +160,36 @@ resource "aws_route_table" "terrafrom-RT" {
   }
 }
 
-#Associating Public subnets to Route Tables
+#Associating Public subnets to Public Route Tables
 resource "aws_route_table_association" "terraform-RT-association" {
   subnet_id      = aws_subnet.terraform-public-subnet-1a.id
-  route_table_id = aws_route_table.terrafrom-RT.id
+  route_table_id = aws_route_table.terraform-RT.id
 }
 
 resource "aws_route_table_association" "terraform-RT-association1" {
   subnet_id      = aws_subnet.terraform-public-subnet-1b.id
-  route_table_id = aws_route_table.terrafrom-RT.id
+  route_table_id = aws_route_table.terraform-RT.id
 }
 
 
 
 #Creating a Route Table for Private subnets
 resource "aws_route_table" "terrafrom-private-RT" {
-  vpc_id = var.VPC_id
+  vpc_id = aws_vpc.terraform-VPC.id
 
   tags = {
     Name = "terraform-private-RT"
   }
 }
 
-#Associating Private subnets to Route Tables
+#Associating Private subnets to Private Route Tables
 resource "aws_route_table_association" "terraform-private-RT-association" {
-  subnet_id      = aws_subnet.terraform-public-subnet-1a.id
+  subnet_id      = aws_subnet.terraform-private-subnet-1a.id
   route_table_id = aws_route_table.terrafrom-private-RT.id
 }
 
 resource "aws_route_table_association" "terraform-private-RT-association1" {
-  subnet_id      = aws_subnet.terraform-public-subnet-1b.id
+  subnet_id      = aws_subnet.terraform-private-subnet-1b.id
   route_table_id = aws_route_table.terrafrom-private-RT.id
 }
 
@@ -196,24 +198,24 @@ resource "aws_route_table_association" "terraform-private-RT-association1" {
 #Creating the Launch Template for ASG
 resource "aws_launch_template" "terraform-LT" {
   name = "terraform-LT"
-
   instance_type = "t2.micro"
-
-  key_name = aws_key_pair.terrafrom-keypair.id 
-
+  image_id = "ami-0f5ee92e2d63afc18"
+  key_name = aws_key_pair.terrafrom-keypair.id
+   
   monitoring {
     enabled = true
   }
+  network_interfaces {
+    associate_public_ip_address = true
+  }
 
 #placement {
-#  availability_zone = ["ap-south-1a","ap-south-1b"]
+#  availability_zone = ap-south-1a
 #}
 
   vpc_security_group_ids = [aws_security_group.terraform-security-group.id]
-
   tag_specifications {
     resource_type = "instance"
-
     tags = {
       Name = "Terraform-ASG-Project"
     }
@@ -226,8 +228,8 @@ resource "aws_launch_template" "terraform-LT" {
 
 #Creating the Auto Scaling Group(ASG)
 resource "aws_autoscaling_group" "terraform-ASG" {
-  #availability_zones = ["ap-south-1a","ap-south-1b"]
-  vpc_zone_identifier = ["aws_subnet.terraform-public-subnet-1a.id","aws_subnet.terraform-public-subnet-1b.id"]
+  #availability_zones = [ap-south-1a, ap-south-1b]
+  vpc_zone_identifier = [aws_subnet.terraform-public-subnet-1a.id, aws_subnet.terraform-public-subnet-1b.id]
   health_check_grace_period = 300
   health_check_type         = "ELB"
   desired_capacity   = 2
@@ -247,7 +249,7 @@ resource "aws_lb_target_group" "terraform-TG" {
   name     = "terraform-TG"
   port     = 80
   protocol = "HTTP"
-  vpc_id   = var.VPC_id
+  vpc_id   = aws_vpc.terraform-VPC.id
 }
 
 
@@ -272,7 +274,7 @@ resource "aws_lb" "terraform-loadbalancer" {
   internal           = "false"
   load_balancer_type = "application"
   security_groups    = [aws_security_group.terraform-security-group.id]
-  subnets            = ["aws_subnet.terraform-public-subnet-1a.id","aws_subnet.terraform-public-subnet-1b.id"]
+  subnets            = [aws_subnet.terraform-public-subnet-1a.id, aws_subnet.terraform-public-subnet-1b.id]
 
   tags = {
     Environment = "Project"
